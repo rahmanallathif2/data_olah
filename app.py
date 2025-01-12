@@ -1,7 +1,5 @@
-import psycopg2
 import pandas as pd
 import streamlit as st
-from sqlalchemy import create_engine
 from io import BytesIO
 
 # Fungsi untuk mengimpor file Excel atau CSV
@@ -13,65 +11,22 @@ def upload_file(uploaded_file):
     else:
         raise ValueError("Format file tidak didukung. Silakan upload file CSV atau Excel.")
 
-# Fungsi untuk memproses data menggunakan query SQL
+# Fungsi untuk memproses data
 def process_data(dataregis_df, masterkel_df):
-    # Menggunakan SQLAlchemy untuk koneksi ke server PostgreSQL
-    engine = create_engine("postgresql://nama_user:nama_password@alamat_server_postgresql:5432/nama_database")
+    # Melakukan join antara dataregis dan masterkel dengan pandas
+    merged_df = pd.merge(dataregis_df, masterkel_df, how='left', 
+                         left_on='full_address', right_on='kelurahan', 
+                         suffixes=('_dr', '_mk'))
 
-    # Membersihkan tabel sebelum menyisipkan data baru (jika diperlukan)
-    with engine.connect() as conn:
-        conn.execute("DELETE FROM dataregis;")
-        conn.execute("DELETE FROM masterkel;")
+    # Menambahkan kolom yang sesuai dengan ROW_NUMBER pada SQL menggunakan pandas
+    merged_df['rn'] = merged_df.groupby('no_polisi').cumcount() + 1
 
-        # Menyisipkan data ke dalam PostgreSQL (manual insert)
-        for index, row in dataregis_df.iterrows():
-            conn.execute("""
-                INSERT INTO dataregis (no_polisi, full_address, kd_camat, kecamatan, nm_merek_kb, nm_model_kb, 
-                                       kd_jenis_kb, jenis_kendaraan, th_buatan, no_chasis, no_mesin, warna_kb, tg_pros_bayar) 
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """, (row['no_polisi'], row['full_address'], row['kd_camat'], row['kecamatan'], row['nm_merek_kb'], 
-                  row['nm_model_kb'], row['kd_jenis_kb'], row['jenis_kendaraan'], row['th_buatan'], 
-                  row['no_chasis'], row['no_mesin'], row['warna_kb'], row['tg_pros_bayar']))
+    # Memilih hanya baris dengan rn = 1 untuk setiap no_polisi
+    result_df = merged_df[merged_df['rn'] == 1]
 
-        for index, row in masterkel_df.iterrows():
-            conn.execute("""
-                INSERT INTO masterkel (kelurahan, kecamatan, kelurahan_master, kecamatan_master) 
-                VALUES (%s, %s, %s, %s)
-            """, (row['kelurahan'], row['kecamatan'], row['kelurahan_master'], row['kecamatan_master']))
+    # Hapus kolom rn setelah proses selesai
+    result_df = result_df.drop(columns=['rn'])
 
-    # Query SQL untuk mencocokkan data
-    query = """
-    WITH MatchedData AS (
-        SELECT 
-            dr.no_polisi,
-            dr.full_address,
-            dr.kd_camat,
-            dr.kecamatan,
-            dr.nm_merek_kb,
-            dr.nm_model_kb,
-            dr.kd_jenis_kb,
-            dr.jenis_kendaraan,
-            dr.th_buatan,
-            dr.no_chasis,
-            dr.no_mesin,
-            dr.warna_kb,
-            dr.tg_pros_bayar,
-            mk.kelurahan AS kelurahan_masterkel,
-            mk.kecamatan AS kecamatan_masterkel,
-            mk.kelurahan_master AS kelurahan_master,
-            mk.kecamatan_master AS kecamatan_master,
-            ROW_NUMBER() OVER (PARTITION BY dr.no_polisi ORDER BY dr.no_polisi) AS rn
-        FROM dataregis dr
-        LEFT JOIN masterkel mk 
-          ON dr.full_address LIKE CONCAT('%', mk.kelurahan, '%')
-    )
-    SELECT *
-    FROM MatchedData
-    WHERE rn = 1;
-    """
-    
-    # Mengambil hasil query ke dalam DataFrame
-    result_df = pd.read_sql(query, engine)
     return result_df
 
 # Fungsi untuk menyimpan dataframe ke Excel dan membuat link unduh
@@ -98,6 +53,7 @@ def main():
             st.write("Kolom pada file dataregis:", dataregis_df.columns)
             st.write("Kolom pada file masterkel:", masterkel_df.columns)
 
+            # Proses data tanpa PostgreSQL
             result_df = process_data(dataregis_df, masterkel_df)
 
             st.write("Hasil Proses Data:")
