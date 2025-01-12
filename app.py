@@ -15,30 +15,31 @@ def upload_file(uploaded_file):
 
 # Fungsi untuk memproses data menggunakan query SQL
 def process_data(dataregis_df, masterkel_df):
-    conn = psycopg2.connect(
-        dbname="postgres",  # Nama database PostgreSQL Anda
-        user="postgres",    # Nama user PostgreSQL Anda
-        password="Admin",   # Password PostgreSQL Anda
-        host="localhost",   # Host database Anda
-        port="5432"         # Port database Anda
-    )
-    cursor = conn.cursor()
+    # Menggunakan SQLAlchemy untuk koneksi ke server PostgreSQL
+    engine = create_engine("postgresql://nama_user:nama_password@alamat_server_postgresql:5432/nama_database")
 
-    # Membersihkan tabel sebelum menyisipkan data baru
-    cursor.execute("DELETE FROM dataregis;")
-    cursor.execute("DELETE FROM masterkel;")
+    # Membersihkan tabel sebelum menyisipkan data baru (jika diperlukan)
+    with engine.connect() as conn:
+        conn.execute("DELETE FROM dataregis;")
+        conn.execute("DELETE FROM masterkel;")
 
-    # Menyisipkan data ke dalam PostgreSQL (manual insert)
-    for index, row in dataregis_df.iterrows():
-        cursor.execute("INSERT INTO dataregis (no_polisi, full_address, kd_camat, kecamatan, nm_merek_kb, nm_model_kb, kd_jenis_kb, jenis_kendaraan, th_buatan, no_chasis, no_mesin, warna_kb, tg_pros_bayar) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)", 
-                       (row['no_polisi'], row['full_address'], row['kd_camat'], row['kecamatan'], row['nm_merek_kb'], row['nm_model_kb'], row['kd_jenis_kb'], row['jenis_kendaraan'], row['th_buatan'], row['no_chasis'], row['no_mesin'], row['warna_kb'], row['tg_pros_bayar']))
+        # Menyisipkan data ke dalam PostgreSQL (manual insert)
+        for index, row in dataregis_df.iterrows():
+            conn.execute("""
+                INSERT INTO dataregis (no_polisi, full_address, kd_camat, kecamatan, nm_merek_kb, nm_model_kb, 
+                                       kd_jenis_kb, jenis_kendaraan, th_buatan, no_chasis, no_mesin, warna_kb, tg_pros_bayar) 
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """, (row['no_polisi'], row['full_address'], row['kd_camat'], row['kecamatan'], row['nm_merek_kb'], 
+                  row['nm_model_kb'], row['kd_jenis_kb'], row['jenis_kendaraan'], row['th_buatan'], 
+                  row['no_chasis'], row['no_mesin'], row['warna_kb'], row['tg_pros_bayar']))
 
-    for index, row in masterkel_df.iterrows():
-        cursor.execute("INSERT INTO masterkel (kelurahan, kecamatan, kelurahan_master, kecamatan_master) VALUES (%s, %s, %s, %s)", 
-                       (row['kelurahan'], row['kecamatan'], row['kelurahan_master'], row['kecamatan_master']))
+        for index, row in masterkel_df.iterrows():
+            conn.execute("""
+                INSERT INTO masterkel (kelurahan, kecamatan, kelurahan_master, kecamatan_master) 
+                VALUES (%s, %s, %s, %s)
+            """, (row['kelurahan'], row['kecamatan'], row['kelurahan_master'], row['kecamatan_master']))
 
-    conn.commit()
-
+    # Query SQL untuk mencocokkan data
     query = """
     WITH MatchedData AS (
         SELECT 
@@ -68,8 +69,9 @@ def process_data(dataregis_df, masterkel_df):
     FROM MatchedData
     WHERE rn = 1;
     """
-    result_df = pd.read_sql(query, conn)
-    conn.close()
+    
+    # Mengambil hasil query ke dalam DataFrame
+    result_df = pd.read_sql(query, engine)
     return result_df
 
 # Fungsi untuk menyimpan dataframe ke Excel dan membuat link unduh
@@ -90,14 +92,12 @@ def main():
 
     if dataregis_file is not None and masterkel_file is not None:
         try:
-            # Mengunggah dan memproses data
             dataregis_df = upload_file(dataregis_file)
             masterkel_df = upload_file(masterkel_file)
 
             st.write("Kolom pada file dataregis:", dataregis_df.columns)
             st.write("Kolom pada file masterkel:", masterkel_df.columns)
 
-            # Proses data dengan query SQL
             result_df = process_data(dataregis_df, masterkel_df)
 
             st.write("Hasil Proses Data:")
