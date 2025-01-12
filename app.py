@@ -13,16 +13,34 @@ def upload_file(uploaded_file):
 
 # Fungsi untuk memproses data
 def process_data(dataregis_df, masterkel_df):
+    # Debug: Tampilkan beberapa data pertama dari kedua file
+    print("Data Registrasi (dataregis_df):")
+    print(dataregis_df.head())  # Debugging line
+    print("Data Master Kelurahan (masterkel_df):")
+    print(masterkel_df.head())  # Debugging line
+    
     # Melakukan join antara dataregis dan masterkel dengan pandas
     merged_df = pd.merge(dataregis_df, masterkel_df, how='left', 
                          left_on='full_address', right_on='kelurahan', 
                          suffixes=('_dr', '_mk'))
 
+    # Debug: Tampilkan beberapa baris setelah merge
+    print("Data Setelah Merge:")
+    print(merged_df.head())  # Debugging line
+
     # Menambahkan kolom yang sesuai dengan ROW_NUMBER pada SQL menggunakan pandas
     merged_df['rn'] = merged_df.groupby('no_polisi').cumcount() + 1
 
+    # Debug: Tampilkan beberapa baris setelah penambahan kolom 'rn'
+    print("Data Setelah Menambahkan Kolom 'rn':")
+    print(merged_df.head())  # Debugging line
+
     # Memilih hanya baris dengan rn = 1 untuk setiap no_polisi
     result_df = merged_df[merged_df['rn'] == 1]
+
+    # Debug: Tampilkan hasil akhir sebelum mengembalikan
+    print("Data Hasil Seleksi (rn = 1):")
+    print(result_df.head())  # Debugging line
 
     # Hapus kolom rn setelah proses selesai
     result_df = result_df.drop(columns=['rn'])
@@ -56,21 +74,22 @@ def main():
             # Proses data tanpa PostgreSQL
             result_df = process_data(dataregis_df, masterkel_df)
 
-            st.write("Hasil Proses Data:")
-            st.write(result_df)
+            if result_df.empty:
+                st.write("Hasil proses data kosong.")
+            else:
+                st.write("Hasil Proses Data:")
+                st.write(result_df)
 
-            # Tombol untuk mengunduh hasil dalam format Excel
-            excel_data = to_excel(result_df)
-            st.download_button(
-                label="Unduh Hasil dalam Format Excel",
-                data=excel_data,
-                file_name="hasil_proses_data.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
+                # Tombol untuk mengunduh hasil dalam format Excel
+                excel_data = to_excel(result_df)
+                st.download_button(
+                    label="Unduh Hasil dalam Format Excel",
+                    data=excel_data,
+                    file_name="hasil_proses_data.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
         
         except Exception as e:
             st.error(f"Terjadi kesalahan: {e}")
 
-# Jalankan aplikasi Streamlit
-if __name__ == "__main__":
-    main()
+# Jalankan aplikasi S
