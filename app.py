@@ -19,7 +19,7 @@ def process_data(dataregis_df, masterkel_df):
         dbname="postgres",  # Nama database PostgreSQL Anda
         user="postgres",    # Nama user PostgreSQL Anda
         password="Admin",   # Password PostgreSQL Anda
-        host="0.0.0.0/0 ",   # Host database Anda
+        host="localhost",   # Host database Anda
         port="5432"         # Port database Anda
     )
     cursor = conn.cursor()
@@ -90,12 +90,14 @@ def main():
 
     if dataregis_file is not None and masterkel_file is not None:
         try:
+            # Mengunggah dan memproses data
             dataregis_df = upload_file(dataregis_file)
             masterkel_df = upload_file(masterkel_file)
 
             st.write("Kolom pada file dataregis:", dataregis_df.columns)
             st.write("Kolom pada file masterkel:", masterkel_df.columns)
 
+            # Proses data dengan query SQL
             result_df = process_data(dataregis_df, masterkel_df)
 
             st.write("Hasil Proses Data:")
