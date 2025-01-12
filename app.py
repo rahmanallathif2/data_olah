@@ -46,7 +46,7 @@ def process_data(dataregis_df, masterkel_df):
             ROW_NUMBER() OVER (PARTITION BY dr.no_polisi ORDER BY dr.no_polisi) AS rn
         FROM dataregis dr
         LEFT JOIN masterkel mk 
-          ON dr.full_address LIKE '%' || mk.kelurahan || '%'
+           ON dr.full_address LIKE CONCAT('%', mk.kelurahan, '%')
     )
     SELECT *
     FROM MatchedData
