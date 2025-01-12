@@ -19,7 +19,7 @@ def process_data(dataregis_df, masterkel_df):
         dbname="postgres",  # Nama database PostgreSQL Anda
         user="postgres",    # Nama user PostgreSQL Anda
         password="Admin",   # Password PostgreSQL Anda
-        host="localhost",   # Host database Anda
+        host="203.0.113.1",   # Host database Anda
         port="5432"         # Port database Anda
     )
     cursor = conn.cursor()
