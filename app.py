@@ -1,5 +1,7 @@
+import psycopg2
 import pandas as pd
 import streamlit as st
+from sqlalchemy import create_engine
 from io import BytesIO
 
 # Fungsi untuk mengimpor file Excel atau CSV
@@ -11,40 +13,63 @@ def upload_file(uploaded_file):
     else:
         raise ValueError("Format file tidak didukung. Silakan upload file CSV atau Excel.")
 
-# Fungsi untuk memproses data
+# Fungsi untuk memproses data menggunakan query SQL
 def process_data(dataregis_df, masterkel_df):
-    # Debug: Tampilkan beberapa data pertama dari kedua file
-    print("Data Registrasi (dataregis_df):")
-    print(dataregis_df.head())  # Debugging line
-    print("Data Master Kelurahan (masterkel_df):")
-    print(masterkel_df.head())  # Debugging line
-    
-    # Melakukan join antara dataregis dan masterkel dengan pandas
-    merged_df = pd.merge(dataregis_df, masterkel_df, how='left', 
-                         left_on='full_address', right_on='kelurahan', 
-                         suffixes=('_dr', '_mk'))
+    conn = psycopg2.connect(
+        dbname="postgres",  # Nama database PostgreSQL Anda
+        user="postgres",    # Nama user PostgreSQL Anda
+        password="Admin",   # Password PostgreSQL Anda
+        host="localhost",   # Host database Anda
+        port="5432"         # Port database Anda
+    )
+    cursor = conn.cursor()
 
-    # Debug: Tampilkan beberapa baris setelah merge
-    print("Data Setelah Merge:")
-    print(merged_df.head())  # Debugging line
+    # Membersihkan tabel sebelum menyisipkan data baru
+    cursor.execute("DELETE FROM dataregis;")
+    cursor.execute("DELETE FROM masterkel;")
 
-    # Menambahkan kolom yang sesuai dengan ROW_NUMBER pada SQL menggunakan pandas
-    merged_df['rn'] = merged_df.groupby('no_polisi').cumcount() + 1
+    # Menyisipkan data ke dalam PostgreSQL (manual insert)
+    for index, row in dataregis_df.iterrows():
+        cursor.execute("INSERT INTO dataregis (no_polisi, full_address, kd_camat, kecamatan, nm_merek_kb, nm_model_kb, kd_jenis_kb, jenis_kendaraan, th_buatan, no_chasis, no_mesin, warna_kb, tg_pros_bayar) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)", 
+                       (row['no_polisi'], row['full_address'], row['kd_camat'], row['kecamatan'], row['nm_merek_kb'], row['nm_model_kb'], row['kd_jenis_kb'], row['jenis_kendaraan'], row['th_buatan'], row['no_chasis'], row['no_mesin'], row['warna_kb'], row['tg_pros_bayar']))
 
-    # Debug: Tampilkan beberapa baris setelah penambahan kolom 'rn'
-    print("Data Setelah Menambahkan Kolom 'rn':")
-    print(merged_df.head())  # Debugging line
+    for index, row in masterkel_df.iterrows():
+        cursor.execute("INSERT INTO masterkel (kelurahan, kecamatan, kelurahan_master, kecamatan_master) VALUES (%s, %s, %s, %s)", 
+                       (row['kelurahan'], row['kecamatan'], row['kelurahan_master'], row['kecamatan_master']))
 
-    # Memilih hanya baris dengan rn = 1 untuk setiap no_polisi
-    result_df = merged_df[merged_df['rn'] == 1]
+    conn.commit()
 
-    # Debug: Tampilkan hasil akhir sebelum mengembalikan
-    print("Data Hasil Seleksi (rn = 1):")
-    print(result_df.head())  # Debugging line
-
-    # Hapus kolom rn setelah proses selesai
-    result_df = result_df.drop(columns=['rn'])
-
+    query = """
+    WITH MatchedData AS (
+        SELECT 
+            dr.no_polisi,
+            dr.full_address,
+            dr.kd_camat,
+            dr.kecamatan,
+            dr.nm_merek_kb,
+            dr.nm_model_kb,
+            dr.kd_jenis_kb,
+            dr.jenis_kendaraan,
+            dr.th_buatan,
+            dr.no_chasis,
+            dr.no_mesin,
+            dr.warna_kb,
+            dr.tg_pros_bayar,
+            mk.kelurahan AS kelurahan_masterkel,
+            mk.kecamatan AS kecamatan_masterkel,
+            mk.kelurahan_master AS kelurahan_master,
+            mk.kecamatan_master AS kecamatan_master,
+            ROW_NUMBER() OVER (PARTITION BY dr.no_polisi ORDER BY dr.no_polisi) AS rn
+        FROM dataregis dr
+        LEFT JOIN masterkel mk 
+          ON dr.full_address LIKE CONCAT('%', mk.kelurahan, '%')
+    )
+    SELECT *
+    FROM MatchedData
+    WHERE rn = 1;
+    """
+    result_df = pd.read_sql(query, conn)
+    conn.close()
     return result_df
 
 # Fungsi untuk menyimpan dataframe ke Excel dan membuat link unduh
@@ -71,25 +96,23 @@ def main():
             st.write("Kolom pada file dataregis:", dataregis_df.columns)
             st.write("Kolom pada file masterkel:", masterkel_df.columns)
 
-            # Proses data tanpa PostgreSQL
             result_df = process_data(dataregis_df, masterkel_df)
 
-            if result_df.empty:
-                st.write("Hasil proses data kosong.")
-            else:
-                st.write("Hasil Proses Data:")
-                st.write(result_df)
+            st.write("Hasil Proses Data:")
+            st.write(result_df)
 
-                # Tombol untuk mengunduh hasil dalam format Excel
-                excel_data = to_excel(result_df)
-                st.download_button(
-                    label="Unduh Hasil dalam Format Excel",
-                    data=excel_data,
-                    file_name="hasil_proses_data.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
+            # Tombol untuk mengunduh hasil dalam format Excel
+            excel_data = to_excel(result_df)
+            st.download_button(
+                label="Unduh Hasil dalam Format Excel",
+                data=excel_data,
+                file_name="hasil_proses_data.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
         
         except Exception as e:
             st.error(f"Terjadi kesalahan: {e}")
 
-# Jalankan aplikasi S
+# Jalankan aplikasi Streamlit
+if __name__ == "__main__":
+    main()
