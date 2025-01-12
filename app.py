@@ -12,10 +12,15 @@ def upload_file(uploaded_file):
     else:
         raise ValueError("Format file tidak didukung. Silakan upload file CSV atau Excel.")
 
+# Fungsi untuk menggabungkan string menggunakan CONCAT
+def concat(sqlite_conn, string1, string2):
+    return string1 + string2
+
 # Fungsi untuk memproses data menggunakan query SQL
 def process_data(dataregis_df, masterkel_df):
     # Membuat koneksi SQLite lokal
     conn = sqlite3.connect(':memory:')  # Database lokal di memori
+    conn.create_function("CONCAT", 2, concat)  # Menambahkan fungsi CONCAT
     cursor = conn.cursor()
 
     # Membuat tabel sementara di SQLite untuk dataregis dan masterkel
