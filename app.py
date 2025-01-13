@@ -5,7 +5,7 @@ from io import BytesIO
 
 # Fungsi untuk menggabungkan string menggunakan CONCAT
 def concat(*args):
-    return ''.join(str(arg) for arg in args if arg)
+    return ''.join(str(arg) for arg in args if arg is not None)
 
 # Fungsi untuk mengimpor file Excel atau CSV
 def upload_file(uploaded_file):
@@ -51,7 +51,7 @@ def process_data(dataregis_df, masterkel_df):
             ROW_NUMBER() OVER (PARTITION BY dr.no_polisi ORDER BY dr.no_polisi) AS rn
         FROM dataregis dr
         LEFT JOIN masterkel mk 
-           ON dr.full_address LIKE CONCAT('%', mk.kelurahan, '%')
+           ON LOWER(dr.full_address) LIKE CONCAT('%', LOWER(mk.kelurahan), '%')
     )
     SELECT *
     FROM MatchedData
@@ -104,4 +104,4 @@ def main():
 
 # Jalankan aplikasi Streamlit
 if __name__ == "__main__":
-    main()
+    main()
