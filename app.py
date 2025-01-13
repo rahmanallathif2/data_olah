@@ -1,8 +1,11 @@
-import psycopg2
 import pandas as pd
 import streamlit as st
-from sqlalchemy import create_engine
+import sqlite3
 from io import BytesIO
+
+# Fungsi untuk menggabungkan string menggunakan CONCAT
+def concat(*args):
+    return ''.join(str(arg) for arg in args if arg)
 
 # Fungsi untuk mengimpor file Excel atau CSV
 def upload_file(uploaded_file):
@@ -15,30 +18,16 @@ def upload_file(uploaded_file):
 
 # Fungsi untuk memproses data menggunakan query SQL
 def process_data(dataregis_df, masterkel_df):
-    conn = psycopg2.connect(
-        dbname="postgres",  # Nama database PostgreSQL Anda
-        user="postgres",    # Nama user PostgreSQL Anda
-        password="Admin",   # Password PostgreSQL Anda
-        host="localhost",   # Host database Anda
-        port="5432"         # Port database Anda
-    )
+    # Membuat koneksi SQLite lokal
+    conn = sqlite3.connect(':memory:')  # Database lokal di memori
+    conn.create_function("CONCAT", -1, concat)  # Menambahkan fungsi CONCAT
     cursor = conn.cursor()
 
-    # Membersihkan tabel sebelum menyisipkan data baru
-    cursor.execute("DELETE FROM dataregis;")
-    cursor.execute("DELETE FROM masterkel;")
+    # Membuat tabel sementara di SQLite untuk dataregis dan masterkel
+    dataregis_df.to_sql('dataregis', conn, index=False, if_exists='replace')
+    masterkel_df.to_sql('masterkel', conn, index=False, if_exists='replace')
 
-    # Menyisipkan data ke dalam PostgreSQL (manual insert)
-    for index, row in dataregis_df.iterrows():
-        cursor.execute("INSERT INTO dataregis (no_polisi, full_address, kd_camat, kecamatan, nm_merek_kb, nm_model_kb, kd_jenis_kb, jenis_kendaraan, th_buatan, no_chasis, no_mesin, warna_kb, tg_pros_bayar) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)", 
-                       (row['no_polisi'], row['full_address'], row['kd_camat'], row['kecamatan'], row['nm_merek_kb'], row['nm_model_kb'], row['kd_jenis_kb'], row['jenis_kendaraan'], row['th_buatan'], row['no_chasis'], row['no_mesin'], row['warna_kb'], row['tg_pros_bayar']))
-
-    for index, row in masterkel_df.iterrows():
-        cursor.execute("INSERT INTO masterkel (kelurahan, kecamatan, kelurahan_master, kecamatan_master) VALUES (%s, %s, %s, %s)", 
-                       (row['kelurahan'], row['kecamatan'], row['kelurahan_master'], row['kecamatan_master']))
-
-    conn.commit()
-
+    # Menjalankan query SQL
     query = """
     WITH MatchedData AS (
         SELECT 
@@ -62,7 +51,7 @@ def process_data(dataregis_df, masterkel_df):
             ROW_NUMBER() OVER (PARTITION BY dr.no_polisi ORDER BY dr.no_polisi) AS rn
         FROM dataregis dr
         LEFT JOIN masterkel mk 
-          ON dr.full_address LIKE CONCAT('%', mk.kelurahan, '%')
+           ON dr.full_address LIKE CONCAT('%', mk.kelurahan, '%')
     )
     SELECT *
     FROM MatchedData
@@ -114,5 +103,5 @@ def main():
             st.error(f"Terjadi kesalahan: {e}")
 
 # Jalankan aplikasi Streamlit
-if __name__ == "__main__":
-    main()
+if _name_ == "_main_":
+    main()
