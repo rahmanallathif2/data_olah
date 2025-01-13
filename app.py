@@ -103,5 +103,5 @@ def main():
             st.error(f"Terjadi kesalahan: {e}")
 
 # Jalankan aplikasi Streamlit
-if _name_ == "_main_":
+if __name__ == "__main__":
     main()
